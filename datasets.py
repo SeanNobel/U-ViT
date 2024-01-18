@@ -514,7 +514,8 @@ class MSCOCO256Features(DatasetFactory):  # the moments calculated by Stable Dif
         # for visulization in t2i
         self.prompts, self.contexts = [], []
         for f in sorted(os.listdir(os.path.join(path, 'run_vis')), key=lambda x: int(x.split('.')[0])):
-            prompt, context = np.load(os.path.join(path, 'run_vis', f), allow_pickle=True)
+            _data = np.load(os.path.join(path, 'run_vis', f), allow_pickle=True)
+            prompt, context = _data['prompt'], _data['context']
             self.prompts.append(prompt)
             self.contexts.append(context)
         self.contexts = np.array(self.contexts)

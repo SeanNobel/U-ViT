@@ -6,6 +6,7 @@ import libs.clip
 from datasets import MSCOCODatabase
 import argparse
 from tqdm import tqdm
+from termcolor import cprint
 
 
 def main():
@@ -33,7 +34,7 @@ def main():
     latent = clip.encode(prompts)
     for i in range(len(latent)):
         c = latent[i].detach().cpu().numpy()
-        np.save(os.path.join(save_dir, f'{i}.npy'), (prompts[i], c))
+        np.savez(os.path.join(save_dir, str(i)), prompt=prompts[i], context=c)
 
 
 if __name__ == '__main__':
