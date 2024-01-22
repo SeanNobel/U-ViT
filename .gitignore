@@ -7,3 +7,5 @@ assets/*
 
 notebooks/*
 !notebooks/.gitkeep
+
+*.egg-info/
