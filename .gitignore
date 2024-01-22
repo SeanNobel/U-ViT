@@ -1,0 +1,11 @@
+__pycache__/
+
+workdir/
+
+assets/*
+!assets/.gitkeep
+
+notebooks/*
+!notebooks/.gitkeep
+
+*.egg-info/

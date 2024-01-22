@@ -175,6 +175,8 @@ def train(config):
         return _cond + config.sample.scale * (_cond - _uncond)
 
     def train_step(_batch):
+        # _batch[0]: ( 64, 8, 32, 32 )
+        # _batch[1]: ( 64, 77, 768 )
         _metrics = dict()
         optimizer.zero_grad()
         _z = autoencoder.sample(_batch[0]) if 'feature' in config.dataset.name else encode(_batch[0])
