@@ -9,3 +9,5 @@ notebooks/*
 !notebooks/.gitkeep
 
 *.egg-info/
+
+outputs/
