@@ -6,7 +6,7 @@ import torch
 import math
 import random
 from PIL import Image
-import os
+import os, sys
 import glob
 import einops
 import torchvision.transforms.functional as F
@@ -55,7 +55,6 @@ class CFGDataset(Dataset):  # for classifier free guidance
 
 
 class DatasetFactory(object):
-
     def __init__(self):
         self.train = None
         self.test = None
@@ -75,8 +74,8 @@ class DatasetFactory(object):
             return dataset
 
     def unpreprocess(self, v):  # to B C H W and [0, 1]
-        v = 0.5 * (v + 1.)
-        v.clamp_(0., 1.)
+        v = 0.5 * (v + 1.0)
+        v.clamp_(0.0, 1.0)
         return v
 
     @property
@@ -104,8 +103,9 @@ class DatasetFactory(object):
 
 # CIFAR10
 
+
 class CIFAR10(DatasetFactory):
-    r""" CIFAR10 dataset
+    r"""CIFAR10 dataset
 
     Information of the raw dataset:
          train: 50,000
@@ -122,20 +122,28 @@ class CIFAR10(DatasetFactory):
             transform_train.append(transforms.RandomHorizontalFlip())
         transform_train = transforms.Compose(transform_train)
         transform_test = transforms.Compose(transform_test)
-        self.train = datasets.CIFAR10(path, train=True, transform=transform_train, download=True)
-        self.test = datasets.CIFAR10(path, train=False, transform=transform_test, download=True)
+        self.train = datasets.CIFAR10(
+            path, train=True, transform=transform_train, download=True
+        )
+        self.test = datasets.CIFAR10(
+            path, train=False, transform=transform_test, download=True
+        )
 
         assert len(self.train.targets) == 50000
         self.K = max(self.train.targets) + 1
-        self.cnt = torch.tensor([len(np.where(np.array(self.train.targets) == k)[0]) for k in range(self.K)]).float()
+        self.cnt = torch.tensor(
+            [len(np.where(np.array(self.train.targets) == k)[0]) for k in range(self.K)]
+        ).float()
         self.frac = [self.cnt[k] / 50000 for k in range(self.K)]
-        print(f'{self.K} classes')
-        print(f'cnt: {self.cnt}')
-        print(f'frac: {self.frac}')
+        print(f"{self.K} classes")
+        print(f"cnt: {self.cnt}")
+        print(f"frac: {self.frac}")
 
         if cfg:  # classifier free guidance
             assert p_uncond is not None
-            print(f'prepare the dataset for classifier free guidance with p_uncond={p_uncond}')
+            print(
+                f"prepare the dataset for classifier free guidance with p_uncond={p_uncond}"
+            )
             self.train = CFGDataset(self.train, p_uncond, self.K)
 
     @property
@@ -144,7 +152,7 @@ class CIFAR10(DatasetFactory):
 
     @property
     def fid_stat(self):
-        return 'assets/fid_stats/fid_stats_cifar10_train_pytorch.npz'
+        return "assets/fid_stats/fid_stats_cifar10_train_pytorch.npz"
 
     def sample_label(self, n_samples, device):
         return torch.multinomial(self.cnt, n_samples, replacement=True).to(device)
@@ -167,22 +175,26 @@ class FeatureDataset(Dataset):
         return 1_281_167 * 2  # consider the random flip
 
     def __getitem__(self, idx):
-        path = os.path.join(self.path, f'{idx}.npy')
+        path = os.path.join(self.path, f"{idx}.npy")
         z, label = np.load(path, allow_pickle=True)
         return z, label
 
 
-class ImageNet256Features(DatasetFactory):  # the moments calculated by Stable Diffusion image encoder
+class ImageNet256Features(
+    DatasetFactory
+):  # the moments calculated by Stable Diffusion image encoder
     def __init__(self, path, cfg=False, p_uncond=None):
         super().__init__()
-        print('Prepare dataset...')
+        print("Prepare dataset...")
         self.train = FeatureDataset(path)
-        print('Prepare dataset ok')
+        print("Prepare dataset ok")
         self.K = 1000
 
         if cfg:  # classifier free guidance
             assert p_uncond is not None
-            print(f'prepare the dataset for classifier free guidance with p_uncond={p_uncond}')
+            print(
+                f"prepare the dataset for classifier free guidance with p_uncond={p_uncond}"
+            )
             self.train = CFGDataset(self.train, p_uncond, self.K)
 
     @property
@@ -191,23 +203,27 @@ class ImageNet256Features(DatasetFactory):  # the moments calculated by Stable D
 
     @property
     def fid_stat(self):
-        return f'assets/fid_stats/fid_stats_imagenet256_guided_diffusion.npz'
+        return f"assets/fid_stats/fid_stats_imagenet256_guided_diffusion.npz"
 
     def sample_label(self, n_samples, device):
         return torch.randint(0, 1000, (n_samples,), device=device)
 
 
-class ImageNet512Features(DatasetFactory):  # the moments calculated by Stable Diffusion image encoder
+class ImageNet512Features(
+    DatasetFactory
+):  # the moments calculated by Stable Diffusion image encoder
     def __init__(self, path, cfg=False, p_uncond=None):
         super().__init__()
-        print('Prepare dataset...')
+        print("Prepare dataset...")
         self.train = FeatureDataset(path)
-        print('Prepare dataset ok')
+        print("Prepare dataset ok")
         self.K = 1000
 
         if cfg:  # classifier free guidance
             assert p_uncond is not None
-            print(f'prepare the dataset for classifier free guidance with p_uncond={p_uncond}')
+            print(
+                f"prepare the dataset for classifier free guidance with p_uncond={p_uncond}"
+            )
             self.train = CFGDataset(self.train, p_uncond, self.K)
 
     @property
@@ -216,7 +232,7 @@ class ImageNet512Features(DatasetFactory):  # the moments calculated by Stable D
 
     @property
     def fid_stat(self):
-        return f'assets/fid_stats/fid_stats_imagenet512_guided_diffusion.npz'
+        return f"assets/fid_stats/fid_stats_imagenet512_guided_diffusion.npz"
 
     def sample_label(self, n_samples, device):
         return torch.randint(0, 1000, (n_samples,), device=device)
@@ -226,25 +242,31 @@ class ImageNet(DatasetFactory):
     def __init__(self, path, resolution, random_crop=False, random_flip=True):
         super().__init__()
 
-        print(f'Counting ImageNet files from {path}')
-        train_files = _list_image_files_recursively(os.path.join(path, 'train'))
+        print(f"Counting ImageNet files from {path}")
+        train_files = _list_image_files_recursively(os.path.join(path, "train"))
         class_names = [os.path.basename(path).split("_")[0] for path in train_files]
         sorted_classes = {x: i for i, x in enumerate(sorted(set(class_names)))}
         train_labels = [sorted_classes[x] for x in class_names]
-        print('Finish counting ImageNet files')
+        print("Finish counting ImageNet files")
 
-        self.train = ImageDataset(resolution, train_files, labels=train_labels, random_crop=random_crop, random_flip=random_flip)
+        self.train = ImageDataset(
+            resolution,
+            train_files,
+            labels=train_labels,
+            random_crop=random_crop,
+            random_flip=random_flip,
+        )
         self.resolution = resolution
         if len(self.train) != 1_281_167:
-            print(f'Missing train samples: {len(self.train)} < 1281167')
+            print(f"Missing train samples: {len(self.train)} < 1281167")
 
         self.K = max(self.train.labels) + 1
         cnt = dict(zip(*np.unique(self.train.labels, return_counts=True)))
         self.cnt = torch.tensor([cnt[k] for k in range(self.K)]).float()
         self.frac = [self.cnt[k] / len(self.train.labels) for k in range(self.K)]
-        print(f'{self.K} classes')
-        print(f'cnt[:10]: {self.cnt[:10]}')
-        print(f'frac[:10]: {self.frac[:10]}')
+        print(f"{self.K} classes")
+        print(f"cnt[:10]: {self.cnt[:10]}")
+        print(f"frac[:10]: {self.frac[:10]}")
 
     @property
     def data_shape(self):
@@ -252,7 +274,9 @@ class ImageNet(DatasetFactory):
 
     @property
     def fid_stat(self):
-        return f'assets/fid_stats/fid_stats_imagenet{self.resolution}_guided_diffusion.npz'
+        return (
+            f"assets/fid_stats/fid_stats_imagenet{self.resolution}_guided_diffusion.npz"
+        )
 
     def sample_label(self, n_samples, device):
         return torch.multinomial(self.cnt, n_samples, replacement=True).to(device)
@@ -353,7 +377,7 @@ def random_crop_arr(pil_image, image_size, min_crop_frac=0.8, max_crop_frac=1.0)
     arr = np.array(pil_image)
     crop_y = random.randrange(arr.shape[0] - image_size + 1)
     crop_x = random.randrange(arr.shape[1] - image_size + 1)
-    return arr[crop_y: crop_y + image_size, crop_x: crop_x + image_size]
+    return arr[crop_y : crop_y + image_size, crop_x : crop_x + image_size]
 
 
 # CelebA
@@ -376,10 +400,10 @@ class Crop(object):
 
 
 class CelebA(DatasetFactory):
-    r""" train: 162,770
-         val:   19,867
-         test:  19,962
-         shape: 3 * width * width
+    r"""train: 162,770
+    val:   19,867
+    test:  19,962
+    shape: 3 * width * width
     """
 
     def __init__(self, path, resolution=64):
@@ -394,10 +418,18 @@ class CelebA(DatasetFactory):
         y1 = cx - 64
         y2 = cx + 64
 
-        transform = transforms.Compose([Crop(x1, x2, y1, y2), transforms.Resize(self.resolution),
-                                        transforms.RandomHorizontalFlip(), transforms.ToTensor(),
-                                        transforms.Normalize(0.5, 0.5)])
-        self.train = datasets.CelebA(root=path, split="train", target_type=[], transform=transform, download=True)
+        transform = transforms.Compose(
+            [
+                Crop(x1, x2, y1, y2),
+                transforms.Resize(self.resolution),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(0.5, 0.5),
+            ]
+        )
+        self.train = datasets.CelebA(
+            root=path, split="train", target_type=[], transform=transform, download=True
+        )
         self.train = UnlabeledDataset(self.train)
 
     @property
@@ -406,7 +438,7 @@ class CelebA(DatasetFactory):
 
     @property
     def fid_stat(self):
-        return 'assets/fid_stats/fid_stats_celeba64_train_50000_ddim.npz'
+        return "assets/fid_stats/fid_stats_celeba64_train_50000_ddim.npz"
 
     @property
     def has_label(self):
@@ -417,12 +449,14 @@ class CelebA(DatasetFactory):
 
 
 def center_crop(width, height, img):
-    resample = {'box': Image.BOX, 'lanczos': Image.LANCZOS}['lanczos']
+    resample = {"box": Image.BOX, "lanczos": Image.LANCZOS}["lanczos"]
     crop = np.min(img.shape[:2])
-    img = img[(img.shape[0] - crop) // 2: (img.shape[0] + crop) // 2,
-          (img.shape[1] - crop) // 2: (img.shape[1] + crop) // 2]
+    img = img[
+        (img.shape[0] - crop) // 2 : (img.shape[0] + crop) // 2,
+        (img.shape[1] - crop) // 2 : (img.shape[1] + crop) // 2,
+    ]
     try:
-        img = Image.fromarray(img, 'RGB')
+        img = Image.fromarray(img, "RGB")
     except:
         img = Image.fromarray(img)
     img = img.resize((width, height), resample)
@@ -433,6 +467,7 @@ def center_crop(width, height, img):
 class MSCOCODatabase(Dataset):
     def __init__(self, root, annFile, size=None):
         from pycocotools.coco import COCO
+
         self.root = root
         self.height = self.width = size
 
@@ -455,24 +490,24 @@ class MSCOCODatabase(Dataset):
         image = np.array(image).astype(np.uint8)
         image = center_crop(self.width, self.height, image).astype(np.float32)
         image = (image / 127.5 - 1.0).astype(np.float32)
-        image = einops.rearrange(image, 'h w c -> c h w')
+        image = einops.rearrange(image, "h w c -> c h w")
 
         anns = self._load_target(key)
         target = []
         for ann in anns:
-            target.append(ann['caption'])
+            target.append(ann["caption"])
 
         return image, target
 
 
 def get_feature_dir_info(root):
-    files = glob.glob(os.path.join(root, '*.npy'))
-    files_caption = glob.glob(os.path.join(root, '*_*.npy'))
+    files = glob.glob(os.path.join(root, "*.npy"))
+    files_caption = glob.glob(os.path.join(root, "*_*.npy"))
     num_data = len(files) - len(files_caption)
     n_captions = {k: 0 for k in range(num_data)}
     for f in files_caption:
         name = os.path.split(f)[-1]
-        k1, k2 = os.path.splitext(name)[0].split('_')
+        k1, k2 = os.path.splitext(name)[0].split("_")
         n_captions[int(k1)] += 1
     return num_data, n_captions
 
@@ -487,35 +522,42 @@ class MSCOCOFeatureDataset(Dataset):
         return self.num_data
 
     def __getitem__(self, index):
-        z = np.load(os.path.join(self.root, f'{index}.npy'))
+        z = np.load(os.path.join(self.root, f"{index}.npy"))
         k = random.randint(0, self.n_captions[index] - 1)
-        c = np.load(os.path.join(self.root, f'{index}_{k}.npy'))
+        c = np.load(os.path.join(self.root, f"{index}_{k}.npy"))
         return z, c
 
 
-class MSCOCO256Features(DatasetFactory):  # the moments calculated by Stable Diffusion image encoder & the contexts calculated by clip
+class MSCOCO256Features(DatasetFactory):
+    """
+    the moments calculated by Stable Diffusion image encoder & the contexts calculated by clip
+    """
+
     def __init__(self, path, cfg=False, p_uncond=None):
         super().__init__()
-        print('Prepare dataset...')
-        self.train = MSCOCOFeatureDataset(os.path.join(path, 'train'))
-        self.test = MSCOCOFeatureDataset(os.path.join(path, 'val'))
+        print("Prepare dataset...")
+        self.train = MSCOCOFeatureDataset(os.path.join(path, "train"))
+        self.test = MSCOCOFeatureDataset(os.path.join(path, "val"))
         assert len(self.train) == 82783
         assert len(self.test) == 40504
-        print('Prepare dataset ok')
+        print("Prepare dataset ok")
 
-        self.empty_context = np.load(os.path.join(path, 'empty_context.npy'))
+        self.empty_context = np.load(os.path.join(path, "empty_context.npy"))
 
         if cfg:  # classifier free guidance
             assert p_uncond is not None
-            print(f'prepare the dataset for classifier free guidance with p_uncond={p_uncond}')
+            print(f"prepare the dataset for classifier free guidance with p_uncond={p_uncond}")  # fmt: skip
             self.train = CFGDataset(self.train, p_uncond, self.empty_context)
 
         # text embedding extracted by clip
         # for visulization in t2i
         self.prompts, self.contexts = [], []
-        for f in sorted(os.listdir(os.path.join(path, 'run_vis')), key=lambda x: int(x.split('.')[0])):
-            _data = np.load(os.path.join(path, 'run_vis', f), allow_pickle=True)
-            prompt, context = _data['prompt'], _data['context']
+        for f in sorted(
+            os.listdir(os.path.join(path, "run_vis")),
+            key=lambda x: int(x.split(".")[0]),
+        ):
+            _data = np.load(os.path.join(path, "run_vis", f), allow_pickle=True)
+            prompt, context = _data["prompt"], _data["context"]
             self.prompts.append(prompt)
             self.contexts.append(context)
         self.contexts = np.array(self.contexts)
@@ -526,21 +568,129 @@ class MSCOCO256Features(DatasetFactory):  # the moments calculated by Stable Dif
 
     @property
     def fid_stat(self):
-        return f'assets/fid_stats/fid_stats_mscoco256_val.npz'
+        return f"assets/fid_stats/fid_stats_mscoco256_val.npz"
+
+
+# -------------------------------------------
+#                 THINGS-MEG
+# -------------------------------------------
+from nd.datasets.things_meg import ThingsMEGCLIPDataset
+
+
+class ThingsMEGDatabase(Dataset):
+    def __init__(self, args, image_size: int = 256) -> None:
+        super().__init__()
+
+        self.num_subjects = 4
+        self.image_size = image_size
+
+        preproc_dir = os.path.join(args.preprocessed_data_dir, args.preproc_name)
+
+        sample_attrs_paths = [
+            os.path.join(args.thingsmeg_dir, f"sourcedata/sample_attributes_P{i+1}.csv")
+            for i in range(self.num_subjects)
+        ]
+
+        X_list = []
+        Y_paths_list = []
+        for subject_id, sample_attrs_path in enumerate(sample_attrs_paths):
+            X = torch.load(os.path.join(preproc_dir, f"MEG_P{subject_id+1}.pt"))
+
+            Y_paths = np.loadtxt(
+                os.path.join(preproc_dir, f"Images_P{subject_id+1}.txt"),
+                dtype=str,
+            )
+
+            sort_idx = np.argsort(Y_paths)
+
+            X_list.append(X[sort_idx])
+            Y_paths_list.append(Y_paths[sort_idx])
+
+            if subject_id == 0:
+                sample_attrs = np.loadtxt(
+                    sample_attrs_path, dtype=str, delimiter=",", skiprows=1
+                )
+
+                self.train_idxs, self.test_idxs = ThingsMEGCLIPDataset.make_split(
+                    sample_attrs[sort_idx], large_test_set=args.large_test_set
+                )
+
+        self.X = torch.stack(X_list, dim=1)  # ( 27048, 4, 271, 169 )
+
+        assert np.all([np.array_equal(p, Y_paths_list[0]) for p in Y_paths_list])
+        self.Y_paths = Y_paths_list[0]  # ( 27048, )
+
+    def __len__(self):
+        return len(self.Y_paths)
+
+    def __getitem__(self, i):
+        image = Image.open(self.Y_paths[i]).convert("RGB")
+        image = image.resize((self.image_size, self.image_size), Image.LANCZOS)
+        image = np.array(image, dtype=np.float32) / 127.5 - 1.0
+        image = torch.from_numpy(image).permute(2, 0, 1)
+
+        subject_idx = torch.arange(self.num_subjects)
+
+        return self.X[i], image, subject_idx
+
+
+class ThingsMEGFeatureDataset(MSCOCOFeatureDataset):
+    def __init__(self, root):
+        super().__init__(root)
+
+
+class ThingsMEGFeatures(DatasetFactory):
+    """
+    the moments calculated by Stable Diffusion image encoder & the MEG contexts calculated by clip BrainEncoder
+    """
+
+    def __init__(self, path, cfg=False, p_uncond=None):
+        super().__init__()
+        print("Prepare dataset...")
+        self.train = ThingsMEGFeatureDataset(os.path.join(path, "train"))
+        self.test = ThingsMEGFeatureDataset(os.path.join(path, "test"))
+        assert len(self.train) == 19848
+        assert len(self.test) == 2400
+        print("Prepare dataset ok")
+
+        self.empty_context = np.load(os.path.join(path, "empty_context.npy"))
+
+        if cfg:
+            assert p_uncond is not None
+            print(f"prepare the dataset for classifier free guidance with p_uncond={p_uncond}")  # fmt: skip
+            self.train = CFGDataset(self.train, p_uncond, self.empty_context)
+
+        run_vis_idxs = np.arange(0, 100, 10)
+        self.prompts = np.load(os.path.join(path, "test_filenames.npy")).take(run_vis_idxs)  # fmt: skip
+        self.contexts = [
+            np.load(os.path.join(self.test.root, f"{i}_0.npy")) for i in run_vis_idxs
+        ]
+        self.contexts = np.array(self.contexts)
+
+    @property
+    def data_shape(self):
+        return 4, 32, 32
+
+    @property
+    def fid_stat(self):
+        # FIXME: Using MSCOCO stats for now.
+        return f"assets/fid_stats/fid_stats_mscoco256_val.npz"
 
 
 def get_dataset(name, **kwargs):
-    if name == 'cifar10':
+    if name == "cifar10":
         return CIFAR10(**kwargs)
-    elif name == 'imagenet':
+    elif name == "imagenet":
         return ImageNet(**kwargs)
-    elif name == 'imagenet256_features':
+    elif name == "imagenet256_features":
         return ImageNet256Features(**kwargs)
-    elif name == 'imagenet512_features':
+    elif name == "imagenet512_features":
         return ImageNet512Features(**kwargs)
-    elif name == 'celeba':
+    elif name == "celeba":
         return CelebA(**kwargs)
-    elif name == 'mscoco256_features':
+    elif name == "mscoco256_features":
         return MSCOCO256Features(**kwargs)
+    elif name == "thingsmeg_features":
+        return ThingsMEGFeatures(**kwargs)
     else:
         raise NotImplementedError(name)
