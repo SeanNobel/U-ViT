@@ -13,8 +13,8 @@ def get_config():
     config.z_shape = (4, 32, 32)
 
     config.autoencoder = d(
-        pretrained_path='assets/stable-diffusion/autoencoder_kl.pth',
-        scale_factor=0.23010
+        pretrained_path="assets/stable-diffusion/autoencoder_kl.pth",
+        scale_factor=0.23010,
     )
 
     config.train = d(
@@ -26,19 +26,16 @@ def get_config():
     )
 
     config.optimizer = d(
-        name='adamw',
+        name="adamw",
         lr=0.0002,
         weight_decay=0.03,
         betas=(0.9, 0.9),
     )
 
-    config.lr_scheduler = d(
-        name='customized',
-        warmup_steps=5000
-    )
+    config.lr_scheduler = d(name="customized", warmup_steps=5000)
 
     config.nnet = d(
-        name='uvit_t2i',
+        name="uvit_t2i",
         img_size=32,
         in_chans=4,
         patch_size=2,
@@ -49,14 +46,14 @@ def get_config():
         qkv_bias=False,
         mlp_time_embed=False,
         clip_dim=768,
-        num_clip_token=77
+        num_clip_token=1,  # 77
     )
 
     config.dataset = d(
-        name='mscoco256_features',
-        path='assets/datasets/coco256_features',
+        name="thingsmeg_features",  # 'mscoco256_features',
+        path="../data/uvit/thingsmeg_features",  # 'assets/datasets/coco256_features',
         cfg=True,
-        p_uncond=0.1
+        p_uncond=0.1,
     )
 
     config.sample = d(
@@ -64,8 +61,8 @@ def get_config():
         n_samples=30000,
         mini_batch_size=50,
         cfg=True,
-        scale=1.,
-        path=''
+        scale=1.0,
+        path="",
     )
 
     return config
