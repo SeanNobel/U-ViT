@@ -225,9 +225,8 @@ def train(config):
             if "feature" in config.dataset.name
             else encode(_batch[0])
         )
-        loss = LSimple(
-            _z, nnet, _schedule, context=_batch[1]
-        )  # currently only support the extracted feature version
+        loss = LSimple(_z, nnet, _schedule, context=_batch[1])
+        # currently only support the extracted feature version
         _metrics["loss"] = accelerator.gather(loss.detach()).mean()
         accelerator.backward(loss.mean())
         optimizer.step()
@@ -315,16 +314,25 @@ def train(config):
         ):
             torch.cuda.empty_cache()
             logging.info("Save a grid of images...")
-            contexts = torch.tensor(dataset.contexts, device=device)[: 2 * 5]
-            samples = dpm_solver_sample(
-                _n_samples=2 * 5, _sample_steps=50, context=contexts
-            )
-            samples = make_grid(dataset.unpreprocess(samples), 5)
-            save_image(
-                samples, os.path.join(config.sample_dir, f"{train_state.step}.png")
-            )
-            wandb.log({"samples": wandb.Image(samples)}, step=train_state.step)
-            torch.cuda.empty_cache()
+
+            for split, contexts, filenames in zip(
+                ["train", "test"],
+                [dataset.train_contexts, dataset.contexts],
+                [dataset.train_prompts, dataset.prompts],
+            ):
+                contexts = torch.tensor(contexts, device=device)[: 2 * 5]
+                samples = dpm_solver_sample(
+                    _n_samples=2 * 5, _sample_steps=50, context=contexts
+                )
+                samples = make_grid(dataset.unpreprocess(samples), 5)
+                save_image(
+                    samples,
+                    os.path.join(config.sample_dir, f"{train_state.step}_{split}.png"),
+                )
+                title = f"{split} samples {filenames}"
+                wandb.log({title: wandb.Image(samples)}, step=train_state.step)
+                torch.cuda.empty_cache()
+
         accelerator.wait_for_everyone()
 
         if (
