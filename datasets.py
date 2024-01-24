@@ -646,6 +646,9 @@ class ThingsMEGFeatures(DatasetFactory):
 
     def __init__(self, path, cfg=False, p_uncond=None):
         super().__init__()
+
+        self.path = path
+
         print("Prepare dataset...")
         self.train = ThingsMEGFeatureDataset(os.path.join(path, "train"))
         self.test = ThingsMEGFeatureDataset(os.path.join(path, "test"))
@@ -661,11 +664,16 @@ class ThingsMEGFeatures(DatasetFactory):
             self.train = CFGDataset(self.train, p_uncond, self.empty_context)
 
         run_vis_idxs = np.arange(0, 100, 10)
-        self.prompts = np.load(os.path.join(path, "test_filenames.npy")).take(run_vis_idxs)  # fmt: skip
-        self.contexts = [
-            np.load(os.path.join(self.test.root, f"{i}_0.npy")) for i in run_vis_idxs
-        ]
-        self.contexts = np.array(self.contexts)
+        self.prompts, self.contexts = self._load_contexts("test", run_vis_idxs)
+        self.train_prompts, self.train_contexts = self._load_contexts("train", run_vis_idxs)  # fmt: skip
+
+    def _load_contexts(self, split: str, idxs: np.ndarray):
+        prompts = np.load(os.path.join(self.path, f"{split}_filenames.npy")).take(idxs)
+        prompts = [p.split("/")[-1].split(".")[0] for p in prompts]
+        contexts = np.array(
+            [np.load(os.path.join(self.test.root, f"{i}_0.npy")) for i in idxs]
+        )
+        return prompts, contexts
 
     @property
     def data_shape(self):
@@ -673,8 +681,7 @@ class ThingsMEGFeatures(DatasetFactory):
 
     @property
     def fid_stat(self):
-        # FIXME: Using MSCOCO stats for now.
-        return f"assets/fid_stats/fid_stats_mscoco256_val.npz"
+        return f"assets/fid_stats/fid_stats_thingsmeg_test.npz"
 
 
 def get_dataset(name, **kwargs):
