@@ -67,7 +67,8 @@ def main(args):
     # -----------------
     save_root = os.path.join(args.root, "data/uvit/thingsmeg_features")
 
-    # Filenames of test images
+    # Filenames
+    np.save(os.path.join(save_root, "train_filenames.npy"), dataset.Y_paths[dataset.train_idxs])  # fmt: skip
     np.save(os.path.join(save_root, "test_filenames.npy"), dataset.Y_paths[dataset.test_idxs])  # fmt: skip
 
     # Empty context as mean over subjects
