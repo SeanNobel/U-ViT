@@ -575,6 +575,7 @@ class MSCOCO256Features(DatasetFactory):
 #                 THINGS-MEG
 # -------------------------------------------
 from nd.datasets.things_meg import ThingsMEGCLIPDataset
+from nd.utils.preproc_utils import all_equal
 
 
 class ThingsMEGDatabase(Dataset):
@@ -593,6 +594,8 @@ class ThingsMEGDatabase(Dataset):
 
         X_list = []
         Y_paths_list = []
+        train_idxs_list = []
+        test_idxs_list = []
         for subject_id, sample_attrs_path in enumerate(sample_attrs_paths):
             X = torch.load(os.path.join(preproc_dir, f"MEG_P{subject_id+1}.pt"))
 
@@ -606,18 +609,23 @@ class ThingsMEGDatabase(Dataset):
             X_list.append(X[sort_idx])
             Y_paths_list.append(Y_paths[sort_idx])
 
-            if subject_id == 0:
-                sample_attrs = np.loadtxt(
-                    sample_attrs_path, dtype=str, delimiter=",", skiprows=1
-                )
+            sample_attrs = np.loadtxt(
+                sample_attrs_path, dtype=str, delimiter=",", skiprows=1
+            )
+            sample_attrs = sample_attrs[sort_idx]
 
-                self.train_idxs, self.test_idxs = ThingsMEGCLIPDataset.make_split(
-                    sample_attrs[sort_idx], large_test_set=args.large_test_set
-                )
+            train_idxs, test_idxs = ThingsMEGCLIPDataset.make_split(
+                sample_attrs, large_test_set=args.large_test_set
+            )
+            train_idxs_list.append(train_idxs)
+            test_idxs_list.append(test_idxs)
+
+        assert all_equal(train_idxs_list) and all_equal(test_idxs_list) and all_equal(Y_paths_list)  # fmt: skip
+
+        self.train_idxs = train_idxs_list[0]
+        self.test_idxs = test_idxs_list[0]
 
         self.X = torch.stack(X_list, dim=1)  # ( 27048, 4, 271, 169 )
-
-        assert np.all([np.array_equal(p, Y_paths_list[0]) for p in Y_paths_list])
         self.Y_paths = Y_paths_list[0]  # ( 27048, )
 
     def __len__(self):
