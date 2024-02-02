@@ -16,6 +16,8 @@ from nd.models.brain_encoder import BrainEncoder
 from nd.utils.layout import ch_locations_2d
 from nd.utils.eval_utils import get_run_dir
 
+TO_REPORTED_STD = True
+
 
 @torch.no_grad()
 @hydra.main(
@@ -23,6 +25,8 @@ from nd.utils.eval_utils import get_run_dir
 )
 def main(args):
     device = "cuda"
+    save_root = os.path.join(args.root, "data/uvit/thingsmeg", get_run_dir(args).split("/")[-1])  # fmt: skip
+    os.makedirs(save_root, exist_ok=True)
 
     # -----------------
     #      Dataset
@@ -31,17 +35,16 @@ def main(args):
     train_set = torch.utils.data.Subset(dataset, dataset.train_idxs)
     test_set = torch.utils.data.Subset(dataset, dataset.test_idxs)
 
+    # Saving filenames
+    np.save(os.path.join(save_root, "train_filenames.npy"), dataset.Y_paths[dataset.train_idxs])  # fmt: skip
+    np.save(os.path.join(save_root, "test_filenames.npy"), dataset.Y_paths[dataset.test_idxs])  # fmt: skip
+
     # -----------------
     #       Models
     # -----------------
     # Stable Diffusion
-    autoencoder = libs.autoencoder.get_model(
-        "assets/stable-diffusion/autoencoder_kl.pth"
-    ).to(device)
-
-    # CLIP-Vision ViT-B/32
-    # clip_model, preprocess = clip.load("ViT-B/32")
-    # clip_model = clip_model.eval().to(device)
+    autoencoder = libs.autoencoder.get_model("assets/stable-diffusion/autoencoder_kl.pth")  # fmt: skip
+    autoencoder.to(device)
 
     # CLIP-MEG
     subjects = dataset.subject_names if hasattr(dataset, "subject_names") else dataset.num_subjects  # fmt: skip
@@ -62,51 +65,55 @@ def main(args):
     )
     brain_encoder.eval()
 
-    # -----------------
-    #      Extract
-    # -----------------
-    save_root = os.path.join(args.root, "data/uvit/thingsmeg_features")
+    # CLIP-Vision ViT-B/32
+    # clip_model, preprocess = clip.load("ViT-B/32")
+    # clip_model = clip_model.eval().to(device)
 
-    # Filenames
-    np.save(os.path.join(save_root, "train_filenames.npy"), dataset.Y_paths[dataset.train_idxs])  # fmt: skip
-    np.save(os.path.join(save_root, "test_filenames.npy"), dataset.Y_paths[dataset.test_idxs])  # fmt: skip
-
-    # Empty context as mean over subjects
+    # -----------------
+    #   Empty context
+    # -----------------
     X_null = torch.zeros_like(dataset.X[0], device=device)
     Z_null = brain_encoder.encode(X_null, torch.arange(len(X_null), device=device))
     # ( 4, 768 )
-    Z_null = Z_null.mean(dim=0).unsqueeze(0).detach().cpu().numpy()
+    Z_null = Z_null.mean(dim=0, keepdim=True).detach().cpu().numpy()
+    # ( 1, 768 )
     np.save(os.path.join(save_root, "empty_context.npy"), Z_null)
 
-    # Embeddings
+    # -----------------
+    # Extract Embeddings
+    # -----------------
     for split, datas in zip(["train", "test"], [train_set, test_set]):
         save_dir = os.path.join(save_root, split)
         os.makedirs(save_dir, exist_ok=True)
 
-        for idx, (X, images, subject_idxs) in tqdm(enumerate(datas), total=len(datas)):
+        for idx, (X, image, subject_idxs) in tqdm(enumerate(datas), total=len(datas)):
             """
             NOTE: We don't need normalization for OpenAI pretrained CLIP. MEG embeddings are
             normalized within encode method.
+            NOTE: There are 5 captions per image in MSCOCO, while we have 4 subjects per image in THINGS-MEG.
+
+            X ( subjects=4, channels=271, timesteps=169 ): MEG sample from all subjects for the image
+            image ( c=3, h=256, w=256 ): One image sample
+            subject_idxs ( subjects=4, ): torch.arange(4)
             """
-            # image_clip = preprocess(image_clip).to(device)
-            # Y_clip = clip_model.encode_image(image_clip.unsqueeze(0)).float()
-            # Y_clip = Y_clip.squeeze(0).detach().cpu().numpy()
-            # cprint(f"Y_clip (image): {Y_clip.shape}, {Y_clip.dtype}, Mean: {Y_clip.mean()}, Std: {Y_clip.std()}", "cyan")  # fmt: skip
+            moment = autoencoder.encode_moments(image.to(device).unsqueeze(0)).squeeze(0)  # fmt: skip
+            # ( 8, 32, 32 )
+            np.save(os.path.join(save_dir, f"{idx}.npy"), moment.detach().cpu().numpy())
 
-            moments = autoencoder.encode_moments(images.to(device).unsqueeze(0))
-            moments = moments.squeeze(0).detach().cpu().numpy()
-            # cprint(f"KL_moment (image): {moments.shape}, {moments.dtype}, Mean: {moments.mean()}, Std: {moments.std()}", "cyan")  # fmt: skip
-            np.save(os.path.join(save_dir, f"{idx}.npy"), moments)
-
-            Z = brain_encoder.encode(X.to(device), subject_idxs.to(device))
+            Z = brain_encoder.encode(
+                X.to(device), subject_idxs.to(device), normalize=False
+            )
             # ( 4, 768 )
-            # cprint(f"Z (MEG): {Z.shape}, {Z.dtype}, Mean: {Z.mean()}, Std: {Z.std()}", "cyan")  # fmt: skip
 
-            # NOTE: In U-ViT implementation they get multiple latents per caption, while we have multiple subjects per image.
             for i, Z_ in enumerate(Z):
                 # NOTE: Unsqueezing corresponds to making the dimension of 77 in CLIP-Text.
                 Z_ = Z_.unsqueeze(0).detach().cpu().numpy()
                 np.save(os.path.join(save_dir, f"{idx}_{i}.npy"), Z_)
+
+            # image_clip = preprocess(image_clip).to(device)
+            # Y_clip = clip_model.encode_image(image_clip.unsqueeze(0)).float()
+            # Y_clip = Y_clip.squeeze(0).detach().cpu().numpy()
+            # cprint(f"Y_clip (image): {Y_clip.shape}, {Y_clip.dtype}, Mean: {Y_clip.mean()}, Std: {Y_clip.std()}", "cyan")  # fmt: skip
 
 
 if __name__ == "__main__":
