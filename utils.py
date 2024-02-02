@@ -7,10 +7,11 @@ from torchvision.utils import save_image
 from absl import logging
 
 
-def set_logger(log_level='info', fname=None):
+def set_logger(log_level="info", fname=None):
     import logging as _logging
+
     handler = logging.get_absl_handler()
-    formatter = _logging.Formatter('%(asctime)s - %(filename)s - %(message)s')
+    formatter = _logging.Formatter("%(asctime)s - %(filename)s - %(message)s")
     handler.setFormatter(formatter)
     logging.set_verbosity(log_level)
     if fname is not None:
@@ -20,15 +21,17 @@ def set_logger(log_level='info', fname=None):
 
 
 def dct2str(dct):
-    return str({k: f'{v:.6g}' for k, v in dct.items()})
+    return str({k: f"{v:.6g}" for k, v in dct.items()})
 
 
 def get_nnet(name, **kwargs):
-    if name == 'uvit':
-        from libs.uvit import UViT
+    if name == "uvit":
+        from uvit.libs.uvit import UViT
+
         return UViT(**kwargs)
-    elif name == 'uvit_t2i':
-        from libs.uvit_t2i import UViT
+    elif name == "uvit_t2i":
+        from uvit.libs.uvit_t2i import UViT
+
         return UViT(**kwargs)
     else:
         raise NotImplementedError(name)
@@ -41,11 +44,13 @@ def set_seed(seed: int):
 
 
 def get_optimizer(params, name, **kwargs):
-    if name == 'adam':
+    if name == "adam":
         from torch.optim import Adam
+
         return Adam(params, **kwargs)
-    elif name == 'adamw':
+    elif name == "adamw":
         from torch.optim import AdamW
+
         return AdamW(params, **kwargs)
     else:
         raise NotImplementedError(name)
@@ -53,19 +58,22 @@ def get_optimizer(params, name, **kwargs):
 
 def customized_lr_scheduler(optimizer, warmup_steps=-1):
     from torch.optim.lr_scheduler import LambdaLR
+
     def fn(step):
         if warmup_steps > 0:
             return min(step / warmup_steps, 1)
         else:
             return 1
+
     return LambdaLR(optimizer, fn)
 
 
 def get_lr_scheduler(optimizer, name, **kwargs):
-    if name == 'customized':
+    if name == "customized":
         return customized_lr_scheduler(optimizer, **kwargs)
-    elif name == 'cosine':
+    elif name == "cosine":
         from torch.optim.lr_scheduler import CosineAnnealingLR
+
         return CosineAnnealingLR(optimizer, **kwargs)
     else:
         raise NotImplementedError(name)
@@ -93,29 +101,31 @@ class TrainState(object):
 
     def save(self, path):
         os.makedirs(path, exist_ok=True)
-        torch.save(self.step, os.path.join(path, 'step.pth'))
+        torch.save(self.step, os.path.join(path, "step.pth"))
         for key, val in self.__dict__.items():
-            if key != 'step' and val is not None:
-                torch.save(val.state_dict(), os.path.join(path, f'{key}.pth'))
+            if key != "step" and val is not None:
+                torch.save(val.state_dict(), os.path.join(path, f"{key}.pth"))
 
     def load(self, path):
-        logging.info(f'load from {path}')
-        self.step = torch.load(os.path.join(path, 'step.pth'))
+        logging.info(f"load from {path}")
+        self.step = torch.load(os.path.join(path, "step.pth"))
         for key, val in self.__dict__.items():
-            if key != 'step' and val is not None:
-                val.load_state_dict(torch.load(os.path.join(path, f'{key}.pth'), map_location='cpu'))
+            if key != "step" and val is not None:
+                val.load_state_dict(
+                    torch.load(os.path.join(path, f"{key}.pth"), map_location="cpu")
+                )
 
     def resume(self, ckpt_root, step=None):
         if not os.path.exists(ckpt_root):
             return
         if step is None:
-            ckpts = list(filter(lambda x: '.ckpt' in x, os.listdir(ckpt_root)))
+            ckpts = list(filter(lambda x: ".ckpt" in x, os.listdir(ckpt_root)))
             if not ckpts:
                 return
             steps = map(lambda x: int(x.split(".")[0]), ckpts)
             step = max(steps)
-        ckpt_path = os.path.join(ckpt_root, f'{step}.ckpt')
-        logging.info(f'resume from {ckpt_path}')
+        ckpt_path = os.path.join(ckpt_root, f"{step}.ckpt")
+        logging.info(f"resume from {ckpt_path}")
         self.load(ckpt_path)
 
     def to(self, device):
@@ -135,13 +145,18 @@ def initialize_train_state(config, device):
     params += nnet.parameters()
     nnet_ema = get_nnet(**config.nnet)
     nnet_ema.eval()
-    logging.info(f'nnet has {cnt_params(nnet)} parameters')
+    logging.info(f"nnet has {cnt_params(nnet)} parameters")
 
     optimizer = get_optimizer(params, **config.optimizer)
     lr_scheduler = get_lr_scheduler(optimizer, **config.lr_scheduler)
 
-    train_state = TrainState(optimizer=optimizer, lr_scheduler=lr_scheduler, step=0,
-                             nnet=nnet, nnet_ema=nnet_ema)
+    train_state = TrainState(
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+        step=0,
+        nnet=nnet,
+        nnet_ema=nnet_ema,
+    )
     train_state.ema_update(0)
     train_state.to(device)
     return train_state
@@ -153,12 +168,18 @@ def amortize(n_samples, batch_size):
     return k * [batch_size] if r == 0 else k * [batch_size] + [r]
 
 
-def sample2dir(accelerator, path, n_samples, mini_batch_size, sample_fn, unpreprocess_fn=None):
+def sample2dir(
+    accelerator, path, n_samples, mini_batch_size, sample_fn, unpreprocess_fn=None
+):
     os.makedirs(path, exist_ok=True)
     idx = 0
     batch_size = mini_batch_size * accelerator.num_processes
 
-    for _batch_size in tqdm(amortize(n_samples, batch_size), disable=not accelerator.is_main_process, desc='sample2dir'):
+    for _batch_size in tqdm(
+        amortize(n_samples, batch_size),
+        disable=not accelerator.is_main_process,
+        desc="sample2dir",
+    ):
         samples = unpreprocess_fn(sample_fn(mini_batch_size))
         samples = accelerator.gather(samples.contiguous())[:_batch_size]
         if accelerator.is_main_process:
@@ -168,9 +189,9 @@ def sample2dir(accelerator, path, n_samples, mini_batch_size, sample_fn, unprepr
 
 
 def grad_norm(model):
-    total_norm = 0.
+    total_norm = 0.0
     for p in model.parameters():
         param_norm = p.grad.data.norm(2)
         total_norm += param_norm.item() ** 2
-    total_norm = total_norm ** (1. / 2)
+    total_norm = total_norm ** (1.0 / 2)
     return total_norm
