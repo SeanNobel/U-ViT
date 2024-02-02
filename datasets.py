@@ -664,7 +664,7 @@ class ThingsMEGFeatures(DatasetFactory):
         assert len(self.test) == 2400
         print("Prepare dataset ok")
 
-        self.empty_context = np.load(os.path.join(path, "empty_context.npy"))
+        self.empty_context = np.load(os.path.join(path, "empty_context_from_zeros.npy"))
 
         if cfg:
             assert p_uncond is not None
