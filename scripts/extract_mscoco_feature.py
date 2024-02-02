@@ -30,7 +30,7 @@ def main(resolution=256):
         raise NotImplementedError("ERROR!")
 
     device = "cuda"
-    os.makedirs(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
 
     autoencoder = libs.autoencoder.get_model('assets/stable-diffusion/autoencoder_kl.pth')
     autoencoder.to(device)
