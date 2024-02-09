@@ -251,6 +251,7 @@ def train(config):
         _z = dpm_solver.sample(
             _z_init, steps=_sample_steps, eps=1.0 / _schedule.N, T=1.0
         )
+        # ( 10, 4, 32, 32 )
         return decode(_z)
 
     def eval_step(n_samples, sample_steps):
@@ -289,6 +290,19 @@ def train(config):
 
         return _fid.item()
 
+    def sample_save(contexts: np.ndarray, title: str = "samples") -> None:
+        contexts = torch.tensor(contexts, device=device)[: 2 * 5]
+        samples = dpm_solver_sample(
+            _n_samples=2 * 5, _sample_steps=50, context=contexts
+        )
+        samples = make_grid(dataset.unpreprocess(samples), 5)
+        save_image(
+            samples,
+            os.path.join(config.sample_dir, f"{train_state.step}_{title}.png"),
+        )
+        wandb.log({title: wandb.Image(samples)}, step=train_state.step)
+        torch.cuda.empty_cache()
+
     logging.info(
         f"Start fitting, step={train_state.step}, mixed_precision={config.mixed_precision}"
     )
@@ -308,37 +322,24 @@ def train(config):
             logging.info(config.workdir)
             wandb.log(metrics, step=train_state.step)
 
-        if (
-            accelerator.is_main_process
-            and train_state.step % config.train.eval_interval == 0
-        ):
+        if accelerator.is_main_process and train_state.step % config.train.eval_interval == 0:  # fmt: skip
             torch.cuda.empty_cache()
             logging.info("Save a grid of images...")
 
-            for split, contexts, filenames in zip(
-                ["train", "test"],
-                [dataset.train_contexts, dataset.contexts],
-                [dataset.train_prompts, dataset.prompts],
-            ):
-                contexts = torch.tensor(contexts, device=device)[: 2 * 5]
-                samples = dpm_solver_sample(
-                    _n_samples=2 * 5, _sample_steps=50, context=contexts
-                )
-                samples = make_grid(dataset.unpreprocess(samples), 5)
-                save_image(
-                    samples,
-                    os.path.join(config.sample_dir, f"{train_state.step}_{split}.png"),
-                )
-                title = f"{split} samples {filenames}"
-                wandb.log({title: wandb.Image(samples)}, step=train_state.step)
-                torch.cuda.empty_cache()
+            if hasattr(dataset, "train_contexts"):
+                for split, contexts, prompts in zip(
+                    ["train", "test"],
+                    [dataset.train_contexts, dataset.contexts],
+                    [dataset.train_prompts, dataset.prompts],
+                ):
+                    title = f"{split} samples {prompts}"
+                    sample_save(contexts, title)
+            else:
+                sample_save(dataset.contexts)
 
         accelerator.wait_for_everyone()
 
-        if (
-            train_state.step % config.train.save_interval == 0
-            or train_state.step == config.train.n_steps
-        ):
+        if train_state.step % config.train.save_interval == 0 or train_state.step == config.train.n_steps:  # fmt: skip
             torch.cuda.empty_cache()
             logging.info(f"Save and eval checkpoint {train_state.step}...")
             if accelerator.local_process_index == 0:
