@@ -20,7 +20,7 @@ def get_config():
     config.train = d(
         name="default",
         n_steps=1000000,
-        batch_size=256,
+        batch_size=512,
         log_interval=10,
         eval_interval=5000,
         save_interval=50000,
@@ -47,12 +47,12 @@ def get_config():
         qkv_bias=False,
         mlp_time_embed=False,
         clip_dim=768,
-        num_clip_token=1,  # 77,
+        num_clip_token=1,  # 77
     )
 
     config.dataset = d(
-        name="mscoco256_features",
-        path="assets/datasets/coco256_mean_features",
+        name="thingsmeg_features",
+        path="../data/uvit/thingsmeg/large_test_loss-clip_",
         cfg=True,
         p_uncond=0.1,
     )

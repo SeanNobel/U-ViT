@@ -20,9 +20,14 @@ import libs.autoencoder
 import numpy as np
 
 
-def stable_diffusion_beta_schedule(linear_start=0.00085, linear_end=0.0120, n_timestep=1000):
+def stable_diffusion_beta_schedule(
+    linear_start=0.00085, linear_end=0.0120, n_timestep=1000
+):
     _betas = (
-        torch.linspace(linear_start ** 0.5, linear_end ** 0.5, n_timestep, dtype=torch.float64) ** 2
+        torch.linspace(
+            linear_start**0.5, linear_end**0.5, n_timestep, dtype=torch.float64
+        )
+        ** 2
     )
     return _betas.numpy()
 
@@ -31,10 +36,10 @@ def get_skip(alphas, betas):
     N = len(betas) - 1
     skip_alphas = np.ones([N + 1, N + 1], dtype=betas.dtype)
     for s in range(N + 1):
-        skip_alphas[s, s + 1:] = alphas[s + 1:].cumprod()
+        skip_alphas[s, s + 1 :] = alphas[s + 1 :].cumprod()
     skip_betas = np.zeros([N + 1, N + 1], dtype=betas.dtype)
     for t in range(N + 1):
-        prod = betas[1: t + 1] * skip_alphas[1: t + 1, t]
+        prod = betas[1 : t + 1] * skip_alphas[1 : t + 1, t]
         skip_betas[:t, t] = (prod[::-1].cumsum())[::-1]
     return skip_alphas, skip_betas
 
@@ -52,14 +57,14 @@ def mos(a, start_dim=1):  # mean of square
 
 class Schedule(object):  # discrete time
     def __init__(self, _betas):
-        r""" _betas[0...999] = betas[1...1000]
-             for n>=1, betas[n] is the variance of q(xn|xn-1)
-             for n=0,  betas[0]=0
+        r"""_betas[0...999] = betas[1...1000]
+        for n>=1, betas[n] is the variance of q(xn|xn-1)
+        for n=0,  betas[0]=0
         """
 
         self._betas = _betas
-        self.betas = np.append(0., _betas)
-        self.alphas = 1. - self.betas
+        self.betas = np.append(0.0, _betas)
+        self.alphas = 1.0 - self.betas
         self.N = len(_betas)
 
         assert isinstance(self.betas, np.ndarray) and self.betas[0] == 0
@@ -82,7 +87,7 @@ class Schedule(object):  # discrete time
         return torch.tensor(n, device=x0.device), eps, xn
 
     def __repr__(self):
-        return f'Schedule({self.betas[:10]}..., {self.N})'
+        return f"Schedule({self.betas[:10]}..., {self.N})"
 
 
 def LSimple(x0, nnet, schedule, **kwargs):
@@ -92,15 +97,15 @@ def LSimple(x0, nnet, schedule, **kwargs):
 
 
 def train(config):
-    if config.get('benchmark', False):
+    if config.get("benchmark", False):
         torch.backends.cudnn.benchmark = True
         torch.backends.cudnn.deterministic = False
 
-    mp.set_start_method('spawn')
+    mp.set_start_method("spawn")
     accelerator = accelerate.Accelerator()
     device = accelerator.device
     accelerate.utils.set_seed(config.seed, device_specific=True)
-    logging.info(f'Process {accelerator.process_index} using device: {device}')
+    logging.info(f"Process {accelerator.process_index} using device: {device}")
 
     config.mixed_precision = accelerator.mixed_precision
     config = ml_collections.FrozenConfigDict(config)
@@ -113,44 +118,80 @@ def train(config):
         os.makedirs(config.sample_dir, exist_ok=True)
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        wandb.init(dir=os.path.abspath(config.workdir), project=f'uvit_{config.dataset.name}', config=config.to_dict(),
-                   name=config.hparams, job_type='train', mode='offline')
-        utils.set_logger(log_level='info', fname=os.path.join(config.workdir, 'output.log'))
+        wandb.init(
+            dir=os.path.abspath(config.workdir),
+            project=f"uvit_{config.dataset.name}",
+            config=config.to_dict(),
+            name=config.hparams,
+            job_type="train",
+        )  # , mode='offline')
+        utils.set_logger(
+            log_level="info", fname=os.path.join(config.workdir, "output.log")
+        )
         logging.info(config)
     else:
-        utils.set_logger(log_level='error')
+        utils.set_logger(log_level="error")
         builtins.print = lambda *args: None
-    logging.info(f'Run on {accelerator.num_processes} devices')
+    logging.info(f"Run on {accelerator.num_processes} devices")
 
     dataset = get_dataset(**config.dataset)
     assert os.path.exists(dataset.fid_stat)
-    train_dataset = dataset.get_split(split='train', labeled=True)
-    train_dataset_loader = DataLoader(train_dataset, batch_size=mini_batch_size, shuffle=True, drop_last=True,
-                                      num_workers=8, pin_memory=True, persistent_workers=True)
-    test_dataset = dataset.get_split(split='test', labeled=True)  # for sampling
-    test_dataset_loader = DataLoader(test_dataset, batch_size=config.sample.mini_batch_size, shuffle=True, drop_last=True,
-                                     num_workers=8, pin_memory=True, persistent_workers=True)
+    train_dataset = dataset.get_split(split="train", labeled=True)
+    train_dataset_loader = DataLoader(
+        train_dataset,
+        batch_size=mini_batch_size,
+        shuffle=True,
+        drop_last=True,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+    test_dataset = dataset.get_split(split="test", labeled=True)  # for sampling
+    test_dataset_loader = DataLoader(
+        test_dataset,
+        batch_size=config.sample.mini_batch_size,
+        shuffle=True,
+        drop_last=True,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True,
+    )
 
     train_state = utils.initialize_train_state(config, device)
-    nnet, nnet_ema, optimizer, train_dataset_loader, test_dataset_loader = accelerator.prepare(
-        train_state.nnet, train_state.nnet_ema, train_state.optimizer, train_dataset_loader, test_dataset_loader)
+    (
+        nnet,
+        nnet_ema,
+        optimizer,
+        train_dataset_loader,
+        test_dataset_loader,
+    ) = accelerator.prepare(
+        train_state.nnet,
+        train_state.nnet_ema,
+        train_state.optimizer,
+        train_dataset_loader,
+        test_dataset_loader,
+    )
     lr_scheduler = train_state.lr_scheduler
     train_state.resume(config.ckpt_root)
 
     autoencoder = libs.autoencoder.get_model(**config.autoencoder)
     autoencoder.to(device)
 
-    @ torch.cuda.amp.autocast()
+    @torch.cuda.amp.autocast()
     def encode(_batch):
         return autoencoder.encode(_batch)
 
-    @ torch.cuda.amp.autocast()
+    @torch.cuda.amp.autocast()
     def decode(_batch):
         return autoencoder.decode(_batch)
 
     def get_data_generator():
         while True:
-            for data in tqdm(train_dataset_loader, disable=not accelerator.is_main_process, desc='epoch'):
+            for data in tqdm(
+                train_dataset_loader,
+                disable=not accelerator.is_main_process,
+                desc="epoch",
+            ):
                 yield data
 
     data_generator = get_data_generator()
@@ -165,12 +206,12 @@ def train(config):
 
     _betas = stable_diffusion_beta_schedule()
     _schedule = Schedule(_betas)
-    logging.info(f'use {_schedule}')
+    logging.info(f"use {_schedule}")
 
     def cfg_nnet(x, timesteps, context):
         _cond = nnet_ema(x, timesteps, context=context)
         _empty_context = torch.tensor(dataset.empty_context, device=device)
-        _empty_context = einops.repeat(_empty_context, 'L D -> B L D', B=x.size(0))
+        _empty_context = einops.repeat(_empty_context, "L D -> B L D", B=x.size(0))
         _uncond = nnet_ema(x, timesteps, context=_empty_context)
         return _cond + config.sample.scale * (_cond - _uncond)
 
@@ -179,31 +220,45 @@ def train(config):
         # _batch[1]: ( 64, 77, 768 )
         _metrics = dict()
         optimizer.zero_grad()
-        _z = autoencoder.sample(_batch[0]) if 'feature' in config.dataset.name else encode(_batch[0])
-        loss = LSimple(_z, nnet, _schedule, context=_batch[1])  # currently only support the extracted feature version
-        _metrics['loss'] = accelerator.gather(loss.detach()).mean()
+        _z = (
+            autoencoder.sample(_batch[0])
+            if "feature" in config.dataset.name
+            else encode(_batch[0])
+        )
+        loss = LSimple(_z, nnet, _schedule, context=_batch[1])
+        # currently only support the extracted feature version
+        _metrics["loss"] = accelerator.gather(loss.detach()).mean()
         accelerator.backward(loss.mean())
         optimizer.step()
         lr_scheduler.step()
-        train_state.ema_update(config.get('ema_rate', 0.9999))
+        train_state.ema_update(config.get("ema_rate", 0.9999))
         train_state.step += 1
-        return dict(lr=train_state.optimizer.param_groups[0]['lr'], **_metrics)
+        return dict(lr=train_state.optimizer.param_groups[0]["lr"], **_metrics)
 
     def dpm_solver_sample(_n_samples, _sample_steps, **kwargs):
         _z_init = torch.randn(_n_samples, *config.z_shape, device=device)
-        noise_schedule = NoiseScheduleVP(schedule='discrete', betas=torch.tensor(_betas, device=device).float())
+        noise_schedule = NoiseScheduleVP(
+            schedule="discrete", betas=torch.tensor(_betas, device=device).float()
+        )
 
         def model_fn(x, t_continuous):
             t = t_continuous * _schedule.N
             return cfg_nnet(x, t, **kwargs)
 
-        dpm_solver = DPM_Solver(model_fn, noise_schedule, predict_x0=True, thresholding=False)
-        _z = dpm_solver.sample(_z_init, steps=_sample_steps, eps=1. / _schedule.N, T=1.)
+        dpm_solver = DPM_Solver(
+            model_fn, noise_schedule, predict_x0=True, thresholding=False
+        )
+        _z = dpm_solver.sample(
+            _z_init, steps=_sample_steps, eps=1.0 / _schedule.N, T=1.0
+        )
+        # ( 10, 4, 32, 32 )
         return decode(_z)
 
     def eval_step(n_samples, sample_steps):
-        logging.info(f'eval_step: n_samples={n_samples}, sample_steps={sample_steps}, algorithm=dpm_solver, '
-                     f'mini_batch_size={config.sample.mini_batch_size}')
+        logging.info(
+            f"eval_step: n_samples={n_samples}, sample_steps={sample_steps}, algorithm=dpm_solver, "
+            f"mini_batch_size={config.sample.mini_batch_size}"
+        )
 
         def sample_fn(_n_samples):
             _context = next(context_generator)
@@ -214,21 +269,43 @@ def train(config):
             path = config.sample.path or temp_path
             if accelerator.is_main_process:
                 os.makedirs(path, exist_ok=True)
-            utils.sample2dir(accelerator, path, n_samples, config.sample.mini_batch_size, sample_fn, dataset.unpreprocess)
+            utils.sample2dir(
+                accelerator,
+                path,
+                n_samples,
+                config.sample.mini_batch_size,
+                sample_fn,
+                dataset.unpreprocess,
+            )
 
             _fid = 0
             if accelerator.is_main_process:
                 _fid = calculate_fid_given_paths((dataset.fid_stat, path))
-                logging.info(f'step={train_state.step} fid{n_samples}={_fid}')
-                with open(os.path.join(config.workdir, 'eval.log'), 'a') as f:
-                    print(f'step={train_state.step} fid{n_samples}={_fid}', file=f)
-                wandb.log({f'fid{n_samples}': _fid}, step=train_state.step)
+                logging.info(f"step={train_state.step} fid{n_samples}={_fid}")
+                with open(os.path.join(config.workdir, "eval.log"), "a") as f:
+                    print(f"step={train_state.step} fid{n_samples}={_fid}", file=f)
+                wandb.log({f"fid{n_samples}": _fid}, step=train_state.step)
             _fid = torch.tensor(_fid, device=device)
-            _fid = accelerator.reduce(_fid, reduction='sum')
+            _fid = accelerator.reduce(_fid, reduction="sum")
 
         return _fid.item()
 
-    logging.info(f'Start fitting, step={train_state.step}, mixed_precision={config.mixed_precision}')
+    def sample_save(contexts: np.ndarray, title: str = "samples") -> None:
+        contexts = torch.tensor(contexts, device=device)[: 2 * 5]
+        samples = dpm_solver_sample(
+            _n_samples=2 * 5, _sample_steps=50, context=contexts
+        )
+        samples = make_grid(dataset.unpreprocess(samples), 5)
+        save_image(
+            samples,
+            os.path.join(config.sample_dir, f"{train_state.step}_{title}.png"),
+        )
+        wandb.log({title: wandb.Image(samples)}, step=train_state.step)
+        torch.cuda.empty_cache()
+
+    logging.info(
+        f"Start fitting, step={train_state.step}, mixed_precision={config.mixed_precision}"
+    )
 
     step_fid = []
     while train_state.step < config.train.n_steps:
@@ -237,42 +314,56 @@ def train(config):
         metrics = train_step(batch)
 
         nnet.eval()
-        if accelerator.is_main_process and train_state.step % config.train.log_interval == 0:
+        if (
+            accelerator.is_main_process
+            and train_state.step % config.train.log_interval == 0
+        ):
             logging.info(utils.dct2str(dict(step=train_state.step, **metrics)))
             logging.info(config.workdir)
             wandb.log(metrics, step=train_state.step)
 
-        if accelerator.is_main_process and train_state.step % config.train.eval_interval == 0:
+        if accelerator.is_main_process and train_state.step % config.train.eval_interval == 0:  # fmt: skip
             torch.cuda.empty_cache()
-            logging.info('Save a grid of images...')
-            contexts = torch.tensor(dataset.contexts, device=device)[: 2 * 5]
-            samples = dpm_solver_sample(_n_samples=2 * 5, _sample_steps=50, context=contexts)
-            samples = make_grid(dataset.unpreprocess(samples), 5)
-            save_image(samples, os.path.join(config.sample_dir, f'{train_state.step}.png'))
-            wandb.log({'samples': wandb.Image(samples)}, step=train_state.step)
-            torch.cuda.empty_cache()
+            logging.info("Save a grid of images...")
+
+            if hasattr(dataset, "train_contexts"):
+                for split, contexts, prompts in zip(
+                    ["train", "test"],
+                    [dataset.train_contexts, dataset.contexts],
+                    [dataset.train_prompts, dataset.prompts],
+                ):
+                    title = f"{split} samples {prompts}"
+                    sample_save(contexts, title)
+            else:
+                sample_save(dataset.contexts)
+
         accelerator.wait_for_everyone()
 
-        if train_state.step % config.train.save_interval == 0 or train_state.step == config.train.n_steps:
+        if train_state.step % config.train.save_interval == 0 or train_state.step == config.train.n_steps:  # fmt: skip
             torch.cuda.empty_cache()
-            logging.info(f'Save and eval checkpoint {train_state.step}...')
+            logging.info(f"Save and eval checkpoint {train_state.step}...")
             if accelerator.local_process_index == 0:
-                train_state.save(os.path.join(config.ckpt_root, f'{train_state.step}.ckpt'))
+                train_state.save(
+                    os.path.join(config.ckpt_root, f"{train_state.step}.ckpt")
+                )
             accelerator.wait_for_everyone()
-            fid = eval_step(n_samples=10000, sample_steps=50)  # calculate fid of the saved checkpoint
+            fid = eval_step(
+                n_samples=10000, sample_steps=50
+            )  # calculate fid of the saved checkpoint
             step_fid.append((train_state.step, fid))
             torch.cuda.empty_cache()
         accelerator.wait_for_everyone()
 
-    logging.info(f'Finish fitting, step={train_state.step}')
-    logging.info(f'step_fid: {step_fid}')
+    logging.info(f"Finish fitting, step={train_state.step}")
+    logging.info(f"step_fid: {step_fid}")
     step_best = sorted(step_fid, key=lambda x: x[1])[0][0]
-    logging.info(f'step_best: {step_best}')
-    train_state.load(os.path.join(config.ckpt_root, f'{step_best}.ckpt'))
+    logging.info(f"step_best: {step_best}")
+    train_state.load(os.path.join(config.ckpt_root, f"{step_best}.ckpt"))
     del metrics
     accelerator.wait_for_everyone()
-    eval_step(n_samples=config.sample.n_samples, sample_steps=config.sample.sample_steps)
-
+    eval_step(
+        n_samples=config.sample.n_samples, sample_steps=config.sample.sample_steps
+    )
 
 
 from absl import flags
@@ -284,7 +375,8 @@ from pathlib import Path
 
 FLAGS = flags.FLAGS
 config_flags.DEFINE_config_file(
-    "config", None, "Training configuration.", lock_config=False)
+    "config", None, "Training configuration.", lock_config=False
+)
 flags.mark_flags_as_required(["config"])
 flags.DEFINE_string("workdir", None, "Work unit directory.")
 
@@ -292,24 +384,26 @@ flags.DEFINE_string("workdir", None, "Work unit directory.")
 def get_config_name():
     argv = sys.argv
     for i in range(1, len(argv)):
-        if argv[i].startswith('--config='):
-            return Path(argv[i].split('=')[-1]).stem
+        if argv[i].startswith("--config="):
+            return Path(argv[i].split("=")[-1]).stem
 
 
 def get_hparams():
     argv = sys.argv
     lst = []
     for i in range(1, len(argv)):
-        assert '=' in argv[i]
-        if argv[i].startswith('--config.') and not argv[i].startswith('--config.dataset.path'):
-            hparam, val = argv[i].split('=')
-            hparam = hparam.split('.')[-1]
-            if hparam.endswith('path'):
+        assert "=" in argv[i]
+        if argv[i].startswith("--config.") and not argv[i].startswith(
+            "--config.dataset.path"
+        ):
+            hparam, val = argv[i].split("=")
+            hparam = hparam.split(".")[-1]
+            if hparam.endswith("path"):
                 val = Path(val).stem
-            lst.append(f'{hparam}={val}')
-    hparams = '-'.join(lst)
-    if hparams == '':
-        hparams = 'default'
+            lst.append(f"{hparam}={val}")
+    hparams = "-".join(lst)
+    if hparams == "":
+        hparams = "default"
     return hparams
 
 
@@ -317,9 +411,11 @@ def main(argv):
     config = FLAGS.config
     config.config_name = get_config_name()
     config.hparams = get_hparams()
-    config.workdir = FLAGS.workdir or os.path.join('workdir', config.config_name, config.hparams)
-    config.ckpt_root = os.path.join(config.workdir, 'ckpts')
-    config.sample_dir = os.path.join(config.workdir, 'samples')
+    config.workdir = FLAGS.workdir or os.path.join(
+        "workdir", config.config_name, config.hparams
+    )
+    config.ckpt_root = os.path.join(config.workdir, "ckpts")
+    config.sample_dir = os.path.join(config.workdir, "samples")
     train(config)
 
 
