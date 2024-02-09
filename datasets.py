@@ -642,9 +642,22 @@ class ThingsMEGDatabase(Dataset):
         return self.X[i], image, subject_idx
 
 
-class ThingsMEGFeatureDataset(MSCOCOFeatureDataset):
+class ThingsMEGFeatureDataset(Dataset):
     def __init__(self, root):
-        super().__init__(root)
+        self.root = root
+        self.num_data, self.n_captions = get_feature_dir_info(root)
+
+    def __len__(self):
+        return self.num_data
+
+    def __getitem__(self, index):
+        z = np.load(os.path.join(self.root, f"{index}.npy"))
+
+        # FIXME: not using samples from multiple subjects.
+
+        # k = random.randint(0, self.n_captions[index] - 1)
+        c = np.load(os.path.join(self.root, f"{index}_0.npy"))
+        return z, c
 
 
 class ThingsMEGFeatures(DatasetFactory):
@@ -678,9 +691,10 @@ class ThingsMEGFeatures(DatasetFactory):
     def _load_contexts(self, split: str, idxs: np.ndarray):
         prompts = np.load(os.path.join(self.path, f"{split}_filenames.npy")).take(idxs)
         prompts = [p.split("/")[-1].split(".")[0] for p in prompts]
-        contexts = np.array(
-            [np.load(os.path.join(self.test.root, f"{i}_0.npy")) for i in idxs]
-        )
+
+        root = self.test.root if split == "test" else self.train.dataset.root
+        contexts = np.array([np.load(os.path.join(root, f"{i}_0.npy")) for i in idxs])
+
         return prompts, contexts
 
     @property
