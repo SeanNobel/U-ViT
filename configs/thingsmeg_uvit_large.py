@@ -20,7 +20,7 @@ def get_config():
     config.train = d(
         name="default",
         n_steps=1000000,
-        batch_size=256,
+        batch_size=128,
         log_interval=10,
         eval_interval=5000,
         save_interval=50000,
