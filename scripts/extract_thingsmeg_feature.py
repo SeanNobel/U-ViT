@@ -43,7 +43,9 @@ def main(args):
     #       Models
     # -----------------
     # Stable Diffusion
-    autoencoder = libs.autoencoder.get_model("assets/stable-diffusion/autoencoder_kl.pth")  # fmt: skip
+    autoencoder = libs.autoencoder.get_model(
+        "assets/stable-diffusion/autoencoder_kl.pth", scale_factor=0.23010
+    )
     autoencoder.to(device)
 
     # CLIP-MEG
