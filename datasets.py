@@ -655,8 +655,8 @@ class ThingsMEGFeatureDataset(Dataset):
 
         # FIXME: not using samples from multiple subjects.
 
-        # k = random.randint(0, self.n_captions[index] - 1)
-        c = np.load(os.path.join(self.root, f"{index}_0.npy"))
+        k = random.randint(0, self.n_captions[index] - 1)
+        c = np.load(os.path.join(self.root, f"{index}_{k}.npy"))
         return z, c
 
 
