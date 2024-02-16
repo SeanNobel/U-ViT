@@ -52,7 +52,7 @@ def get_config():
 
     config.dataset = d(
         name="thingsmeg_features",
-        path="../data/uvit/thingsmeg/large_test_loss-clip_",
+        path="../data/uvit/thingsmeg/large_test_num_blocks-4_vq-middle1_vq_type-lu_residual_",
         cfg=True,
         p_uncond=0.1,
     )
