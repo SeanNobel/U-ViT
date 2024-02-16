@@ -50,21 +50,11 @@ def main(args):
 
     # CLIP-MEG
     subjects = dataset.subject_names if hasattr(dataset, "subject_names") else dataset.num_subjects  # fmt: skip
-    brain_encoder = BrainEncoder(
-        args,
-        subjects=subjects,
-        layout=eval(args.layout),
-        vq=args.vq,
-        blocks=args.blocks,
-        downsample=args.downsample,
-        temporal_aggregation=args.temporal_aggregation,
-    ).to(device)
-    brain_encoder.load_state_dict(
-        torch.load(
-            os.path.join(args.root, get_run_dir(args), "brain_encoder_best.pt"),
-            map_location=device,
-        )
-    )
+    brain_encoder = BrainEncoder(args, subjects=subjects).to(device)
+
+    weights_path = os.path.join(args.root, get_run_dir(args), "brain_encoder_best.pt")
+    cprint(f"Loading weights from {weights_path}", "cyan")
+    brain_encoder.load_state_dict(torch.load(weights_path, map_location=device))
     brain_encoder.eval()
 
     # CLIP-Vision ViT-B/32
@@ -74,12 +64,18 @@ def main(args):
     # -----------------
     #   Empty context
     # -----------------
-    X_null = torch.zeros_like(dataset.X[0], device=device)
-    Z_null = brain_encoder.encode(X_null, torch.arange(len(X_null), device=device))
-    # ( 4, 768 )
-    Z_null = Z_null.mean(dim=0, keepdim=True).detach().cpu().numpy()
-    # ( 1, 768 )
-    np.save(os.path.join(save_root, "empty_context.npy"), Z_null)
+    for source in ["zeros", "randn"]:
+        X_null = eval(f"torch.{source}_like")(dataset.X[0], device=device)
+        Z_null = brain_encoder.encode(
+            X_null,
+            torch.arange(len(X_null), device=device),
+            normalize=False,
+            swap_dims=True,
+        )
+        # ( 4, 768 )
+        Z_null = Z_null.mean(dim=0).detach().cpu().numpy()
+        # ( 1, 768 )
+        np.save(os.path.join(save_root, f"empty_context_from_{source}.npy"), Z_null)
 
     # -----------------
     # Extract Embeddings
@@ -103,13 +99,13 @@ def main(args):
             np.save(os.path.join(save_dir, f"{idx}.npy"), moment.detach().cpu().numpy())
 
             Z = brain_encoder.encode(
-                X.to(device), subject_idxs.to(device), normalize=False
+                X.to(device), subject_idxs.to(device), normalize=False, swap_dims=True
             )
             # ( 4, 768 )
 
             for i, Z_ in enumerate(Z):
                 # NOTE: Unsqueezing corresponds to making the dimension of 77 in CLIP-Text.
-                Z_ = Z_.unsqueeze(0).detach().cpu().numpy()
+                Z_ = Z_.detach().cpu().numpy()
                 np.save(os.path.join(save_dir, f"{idx}_{i}.npy"), Z_)
 
             # image_clip = preprocess(image_clip).to(device)
