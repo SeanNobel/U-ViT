@@ -1,3 +1,4 @@
+# fmt: off
 import torch
 import torch.nn.functional as F
 import math
@@ -374,17 +375,20 @@ class DPM_Solver:
 
     def model_fn(self, x, t):
         if self.predict_x0:
-            alpha_t, sigma_t = self.noise_schedule.marginal_alpha(
-                t
-            ), self.noise_schedule.marginal_std(t)
+            alpha_t = self.noise_schedule.marginal_alpha(t)
+            sigma_t = self.noise_schedule.marginal_std(t)
+            
             noise = self.model(x, t)
+            
             dims = len(x.shape) - 1
             x0 = (x - sigma_t[(...,) + (None,) * dims] * noise) / alpha_t[(...,) + (None,) * dims]
+            
             if self.thresholding:
                 p = 0.995
                 s = torch.quantile(torch.abs(x0).reshape((x0.shape[0], -1)), p, dim=1)
                 s = torch.maximum(s, torch.ones_like(s).to(s.device))[(...,) + (None,) * dims]
                 x0 = torch.clamp(x0, -s, s) / (s / self.max_val)
+                
             return x0
         else:
             return self.model(x, t)
