@@ -655,8 +655,8 @@ class ThingsMEGFeatureDataset(Dataset):
 
         # FIXME: not using samples from multiple subjects.
 
-        # k = random.randint(0, self.n_captions[index] - 1)
-        c = np.load(os.path.join(self.root, f"{index}_0.npy"))
+        k = random.randint(0, self.n_captions[index] - 1)
+        c = np.load(os.path.join(self.root, f"{index}_{k}.npy"))
         return z, c
 
 
@@ -673,7 +673,7 @@ class ThingsMEGFeatures(DatasetFactory):
         print("Prepare dataset...")
         self.train = ThingsMEGFeatureDataset(os.path.join(path, "train"))
         self.test = ThingsMEGFeatureDataset(os.path.join(path, "test"))
-        assert len(self.train) == 19848
+        assert len(self.train) in [19848, 22248]
         assert len(self.test) == 2400
         print("Prepare dataset ok")
 

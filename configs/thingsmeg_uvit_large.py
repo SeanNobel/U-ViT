@@ -52,7 +52,7 @@ def get_config():
 
     config.dataset = d(
         name="thingsmeg_features",
-        path="../data/uvit/thingsmeg/large_test_loss-clip_",
+        path="../data/uvit/thingsmeg/large_test_chance-False_large_test_set-False_",
         cfg=True,
         p_uncond=0.1,
     )
