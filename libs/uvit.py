@@ -167,7 +167,6 @@ class UViT(nn.Module):
         mlp_time_embed=False,
         num_classes=-1,
         z_shape=None,
-        cond_embed=False,
         use_checkpoint=False,
         conv=True,
         skip=True,
@@ -197,8 +196,7 @@ class UViT(nn.Module):
             self.label_emb = nn.Embedding(self.num_classes, embed_dim)
             self.extras += 1
 
-        if cond_embed:
-            assert z_shape is not None
+        if z_shape is not None:
             self.cond_embed = nn.Linear(math.prod(z_shape), embed_dim)
             self.extras += 1
 
