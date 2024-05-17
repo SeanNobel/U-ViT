@@ -172,9 +172,8 @@ class UViT(nn.Module):
         skip=True,
     ):
         super().__init__()
-        self.num_features = self.embed_dim = (
-            embed_dim  # num_features for consistency with other models
-        )
+        self.num_features = self.embed_dim = embed_dim
+        # num_features for consistency with other models
         self.num_classes = num_classes
         self.in_chans = in_chans
 
